@@ -389,6 +389,80 @@
       .seat-3 { left: 95%; }
       .card-scene { --cw: 36px; --ch: 50px; }
     }
+
+    /* 微信小游戏级适配：玩牌时彻底锁死并重置背景滚动 */
+    body:has(.h-screen) {
+      overflow: hidden !important;
+    }
+
+    /* ==========================================
+      ✨ 微信 WebView 极速全自动自适应与缩放配置 ✨
+      通过标准的 CSS 媒体查询微调手机/平板全端排版
+      ==========================================
+    */
+    @media (max-width: 768px) and (max-height: 850px) {
+      .glass {
+        padding: 1.25rem !important;
+        border-radius: 20px !important;
+      }
+      .glass p {
+        margin-top: 0.5rem !important;
+        line-height: 1.35 !important;
+      }
+      .glass .mt-8 {
+        margin-top: 1rem !important;
+      }
+      .glass .mt-5, .glass .my-5, .glass .mt-6, .glass .mt-3 {
+        margin-top: 0.75rem !important;
+        margin-bottom: 0.75rem !important;
+      }
+      .font-royal.text-4xl {
+        font-size: 2.1rem !important;
+      }
+      input {
+        padding-top: 0.6rem !important;
+        padding-bottom: 0.6rem !important;
+        border-radius: 12px !important;
+      }
+      button.action-btn {
+        padding-top: 0.65rem !important;
+        padding-bottom: 0.65rem !important;
+        border-radius: 12px !important;
+      }
+    }
+
+    @media (max-width: 768px) and (max-height: 720px) {
+      .glass {
+        padding: 1rem !important;
+      }
+      .glass p, .glass .mt-8, .glass .my-5, .glass .mt-6, .glass .mt-5, .glass .mt-3 {
+        margin-top: 0.45rem !important;
+        margin-bottom: 0.45rem !important;
+      }
+      .font-royal.text-4xl {
+        font-size: 1.8rem !important;
+      }
+    }
+
+    /* 当手机或微信内置导航栏使高度变矮时，对局画面执行 0.88 ~ 0.68 等比缩放，彻底释放视野 */
+    @media (max-width: 720px) and (max-height: 750px) {
+      .royal-table-wrap {
+        transform: scale(0.88);
+        transform-origin: center center;
+      }
+    }
+    @media (max-width: 720px) and (max-height: 660px) {
+      .royal-table-wrap {
+        transform: scale(0.78);
+        transform-origin: center center;
+      }
+    }
+    @media (max-width: 720px) and (max-height: 580px) {
+      .royal-table-wrap {
+        transform: scale(0.68);
+        transform-origin: center center;
+      }
+    }
   </style>
 </head>
 <body>
@@ -917,6 +991,7 @@
       return card ? `${card.value}${card.suit}` : "";
     }
 
+    // 移除已发出的牌，构建剩余扑克卡堆
     function remainingDeck(excludedCards) {
       const excluded = new Set((excludedCards || []).filter(Boolean).map(cardKey));
       const deck = [];
@@ -933,6 +1008,7 @@
       return deck;
     }
 
+    // 蒙特卡洛模拟评估胜率
     function estimateWinRate(hole, board, opponentCount, iterations = 140) {
       if (!Array.isArray(hole) || hole.length !== 2) return .25;
       const opponents = Math.max(1, opponentCount || 1);
@@ -1267,7 +1343,7 @@
       let players = safePlayersArray(state.players).map(p => p ? { ...p } : null);
       const p = players[seat];
       if (!p || p.folded || p.allIn) return state;
-      const toCall = Math.max(0, state.currentBet - p.currentBet);
+      
       let log = "";
       let potDelta = 0;
 
@@ -1277,6 +1353,7 @@
         p.lastMove = "弃牌";
         log = `${p.name} 弃牌`;
       } else if (action === "CALL") {
+        const toCall = Math.max(0, state.currentBet - p.currentBet);
         const pay = Math.min(p.chips, toCall);
         p.chips -= pay;
         p.currentBet += pay;
@@ -1668,7 +1745,7 @@
             <BgmController bgmPlaying={bgmPlaying} setBgmPlaying={setBgmPlaying} bgmVolume={bgmVolume} setBgmVolume={setBgmVolume} tracks={tracks} currentTrackIndex={currentTrackIndex} setCurrentTrackIndex={setCurrentTrackIndex} />
           </div>
 
-          <div className="w-full max-w-5xl grid md:grid-cols-[1.04fr_.96fr] gap-5 items-stretch">
+          <div className="w-full max-w-5xl grid md:grid-cols-2 gap-6 items-stretch">
             <div className="glass rounded-[28px] p-6 md:p-8 relative overflow-hidden">
               <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-amber-400/10 blur-3xl"></div>
               <div className="font-royal text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-700">
@@ -1952,13 +2029,11 @@
       const prevMyTurnRef = useRef(false);
       const prevRemainingRef = useRef(TURN_SECONDS);
 
-      /* Notify the player when it becomes their turn */
       useEffect(() => {
         if (isMyTurn && !prevMyTurnRef.current) playSFX('yourturn');
         prevMyTurnRef.current = isMyTurn;
       }, [isMyTurn]);
 
-      /* Countdown urgency beeps for the last 5 seconds of your turn */
       useEffect(() => {
         if (isMyTurn && remaining <= 5 && remaining > 0 && remaining !== prevRemainingRef.current) {
           playSFX('tick');
@@ -1969,7 +2044,7 @@
       useEffect(() => {
         if (!isMyTurn || remaining > 0) return;
         const turnKey = `${gameState.handId}-${gameState.currentTurn}`;
-        if (autoActedRef.current === turnKey) return;   /* fire at most once per turn */
+        if (autoActedRef.current === turnKey) return;
         autoActedRef.current = turnKey;
         onAction(toCall === 0 ? "CALL" : "FOLD");
       }, [isMyTurn, remaining]);
@@ -2002,7 +2077,6 @@
         return () => clearTimeout(timer);
       }, [seqIndex, showdownParticipants.length]);
 
-      /* Showdown SFX: whoosh as each hand is revealed, fanfare when the winner is shown */
       useEffect(() => {
         if (seqIndex < 0) return;
         if (seqIndex < showdownParticipants.length) {
@@ -2013,8 +2087,6 @@
         }
       }, [seqIndex]);
 
-      /* SFX event controller: driven by authoritative state transitions (not the
-         capped actionLog length, which saturates at 6 and would mute later actions). */
       const prevHandIdRef = useRef(null);
       const prevCommCountRef = useRef(0);
       const prevUpdatedAtRef = useRef(0);
@@ -2033,9 +2105,9 @@
         const firstHand = prevHandIdRef.current === null && stage === "preflop";
 
         if (isNewHand || firstHand) {
-          playSFX('deal');                       /* new hand dealt */
+          playSFX('deal');
         } else if (commCount > prevCommCountRef.current && commCount > 0) {
-          playSFX('flip');                       /* flop / turn / river revealed */
+          playSFX('flip');
         }
 
         if (!isNewHand && !firstHand && updatedAt !== prevUpdatedAtRef.current && prevUpdatedAtRef.current !== 0) {
@@ -2046,7 +2118,7 @@
             else if (lastLog.includes("看牌") || lastLog.includes("过牌")) playSFX('check');
             else if (lastLog.includes("全下")) playSFX('allin');
             else if (lastLog.includes("加注") || lastLog.includes("跟注") || lastLog.includes("小盲") || lastLog.includes("大盲")) playSFX('chips');
-            else if (lastLog.includes("：")) playSFX('chat');   /* table message / emoji */
+            else if (lastLog.includes("：")) playSFX('chat');
           }
         }
 
@@ -2059,7 +2131,6 @@
         <div className="relative h-screen w-screen overflow-hidden bg-[#030409] noise">
           
           <div className="absolute top-3 left-3 right-3 z-30 flex items-start justify-between gap-2 md:gap-3 pointer-events-none">
-            {/* PROBLEM 2 FIXED: Sleek horizontal capsule layout for left HUD (Never blocks Seat 1 anymore) */}
             <div className="glass rounded-xl px-3 py-1.5 md:px-4 md:py-3 pointer-events-auto flex flex-row items-center gap-2 md:gap-4 border border-amber-300/10 shrink-0">
               <div>
                 <div className="font-royal text-amber-200 font-black tracking-widest text-xs md:text-sm leading-none">ROYAL</div>
@@ -2080,7 +2151,6 @@
               )}
             </div>
 
-            {/* PROBLEM 2 FIXED: Top-Right cluster with mr-[95px] on mobile to dodge WeChat Capsule button perfectly */}
             <div className="flex items-center gap-2 md:gap-3 pointer-events-auto mr-[95px] sm:mr-0 scale-90 sm:scale-100 origin-right shrink-0">
               <BgmController bgmPlaying={bgmPlaying} setBgmPlaying={setBgmPlaying} bgmVolume={bgmVolume} setBgmVolume={setBgmVolume} tracks={tracks} currentTrackIndex={currentTrackIndex} setCurrentTrackIndex={setCurrentTrackIndex} />
               <button onClick={onLeave} className="action-btn bg-slate-900/80 border border-white/10 text-slate-200 px-3 py-2 text-xs md:text-sm leading-none shrink-0 rounded-xl font-bold">离桌</button>
@@ -2219,21 +2289,17 @@
             </div>
           )}
 
-          {/* PROBLEM 2 FIXED: Beautiful Ultra-Compact flat action desk to prevent blocking Seat 0 */}
           <div className="fixed left-1/2 -translate-x-1/2 bottom-3 z-40 w-[min(96vw,680px)]">
             <div className="relative glass rounded-[20px] p-2 md:p-4 shadow-2xl border border-white/10">
               
-              {/* Floating Action Log Pill (Occupies 0 card layout height!) */}
               {gameState.actionLog?.length > 0 && (
                 <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-center text-[10px] md:text-[11px] font-bold text-amber-200/95 truncate bg-slate-950/95 border border-amber-300/20 rounded-full py-0.5 px-3.5 shadow-lg max-w-[90vw] whitespace-nowrap z-50">
                   📢 {gameState.actionLog[gameState.actionLog.length - 1]}
                 </div>
               )}
 
-              {/* Responsive main horizontal container */}
               <div className="flex flex-row items-center gap-2 md:gap-4 justify-between">
                 
-                {/* Left Side: Pocket Cards (Beautifully overlapping to save horizontal/vertical margins) */}
                 {me && (me.cards || []).length > 0 && (
                   <div className="flex flex-col items-center justify-center shrink-0 bg-black/45 px-2 py-1 md:py-2 rounded-xl border border-white/5">
                     <span className="text-[9px] font-black tracking-wider text-amber-200/80 mb-1 leading-none uppercase">手牌</span>
@@ -2247,7 +2313,6 @@
                   </div>
                 )}
 
-                {/* Right Side: Action bar or current status */}
                 <div className="flex-1 min-w-0">
                   {gameState.stage === "waiting" ? (
                     <div className="flex items-center justify-between gap-2 py-1">
@@ -2260,10 +2325,8 @@
                     </div>
                   ) : isMyTurn ? (
                     <div className="space-y-1.5">
-                      {/* Compact Timer Bar */}
                       <div className="timer-track h-1"><div className="timer-fill" style={{ width: `${remaining / TURN_SECONDS * 100}%` }}></div></div>
                       
-                      {/* Ultra Compact Slider */}
                       {canRaise && (
                         <div className="flex items-center gap-2 bg-black/[0.3] rounded-xl px-2 py-1">
                           <span className="text-[10px] text-slate-400 whitespace-nowrap">加注到</span>
@@ -2280,7 +2343,6 @@
                         </div>
                       )}
                       
-                      {/* Compact Action Buttons Grid */}
                       <div className="grid grid-cols-3 gap-1.5">
                         <button onClick={() => onAction("FOLD")} className="action-btn py-1.5 md:py-2.5 rounded-xl bg-gradient-to-r from-rose-950 to-red-800 text-white text-xs font-black leading-tight">
                           FOLD <span className="text-[9px] font-normal block sm:inline sm:ml-1 opacity-70">弃牌</span>
@@ -2311,7 +2373,6 @@
 
               </div>
 
-              {/* Compact Bottom Utility Row */}
               <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-white/10 pt-2">
                 <div className="flex gap-1 items-center">
                   <button 
@@ -2423,7 +2484,6 @@
       const firebaseReady = !!db;
       const canHost = gameState && mySeat === hostSeat(gameState.players);
       
-      /* PROBLEM 2 FIXED: Restored variable target exact definition matching original architecture */
       const roomLink = useMemo(() => {
         try {
           const url = new URL(location.href);
@@ -2438,14 +2498,12 @@
         localStorage.setItem("royal_holdem_name", name || "玩家");
       }, [name]);
 
-      /* PROBLEM 1 FIXED: Intelligent automatic seat reclaim / auto-reconnect logic */
       useEffect(() => {
         if (mode !== "online" || !gameState || mySeat !== -1) return;
         const players = safePlayersArray(gameState.players);
         const existingSeatIdx = players.findIndex(p => p && p.id === uid);
         if (existingSeatIdx >= 0) {
           setMySeat(existingSeatIdx);
-          // Set seat online and update lastseen heartbeat in Firebase Database
           if (roomRef.current) {
             try {
               const seatRef = roomRef.current.child(`players/${existingSeatIdx}`);
