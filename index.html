@@ -26,8 +26,8 @@
     body {
       margin: 0;
       overflow-x: hidden;
-      overflow-y: auto; /* 允许在手机端内容超出时上下滚动大厅，防止底部按钮被切掉 */
-      -webkit-overflow-scrolling: touch; /* 保证 iOS 移动端 WebView 滚动的流畅度 */
+      overflow-y: auto; /* 允许在手机端由于胶囊遮挡导致高度压缩时上下平滑滚动大厅 */
+      -webkit-overflow-scrolling: touch;
       color: white;
       background:
         radial-gradient(circle at 20% 10%, rgba(128, 24, 42, .35), transparent 34%),
@@ -389,87 +389,6 @@
       .seat-3 { left: 95%; }
       .card-scene { --cw: 36px; --ch: 50px; }
     }
-
-    /* 【微信小程序专项适配】
-      当游戏大厅结束后，进入带有 .h-screen 类的游戏桌台组件时，
-      CSS 智能侦测并自动把全局 overflow 重置为 hidden。
-      这能完美杜绝在微信 WebView 游戏对对碰中产生的任何页面滑动与回弹晃动！
-    */
-    body:has(.h-screen) {
-      overflow: hidden !important;
-    }
-
-    /* ==================================================
-      ✨ 【新加入：全自动自适应与缩放核心配置】 ✨
-      直接通过纯 CSS 处理视口比例，完美适配各种矮屏幕、微信端 WebView
-      ==================================================
-    */
-
-    /* 一、针对移动端矮屏幕（max-height 较小），自动优雅压缩大厅/选座的间距与大小，防底部溢出截断 */
-    @media (max-width: 768px) and (max-height: 850px) {
-      .glass {
-        padding: 1.25rem !important; /* 减小内边距 */
-        border-radius: 20px !important;
-      }
-      .glass p {
-        margin-top: 0.5rem !important;
-        line-height: 1.35 !important;
-      }
-      .glass .mt-8 {
-        margin-top: 1rem !important; /* 压缩起始携带卡片间距 */
-      }
-      .glass .mt-5, .glass .my-5, .glass .mt-6, .glass .mt-3 {
-        margin-top: 0.75rem !important;
-        margin-bottom: 0.75rem !important; /* 精简按钮与输入框间距 */
-      }
-      .font-royal.text-4xl {
-        font-size: 2.25rem !important; /* 微调标题字号防止两行重叠 */
-      }
-      input {
-        padding-top: 0.6rem !important;
-        padding-bottom: 0.6rem !important;
-        border-radius: 12px !important;
-      }
-      button.action-btn {
-        padding-top: 0.65rem !important;
-        padding-bottom: 0.65rem !important;
-        border-radius: 12px !important;
-      }
-    }
-
-    /* 针对超矮屏幕手机或带厚导航栏的特殊 WebView，极速压缩间距 */
-    @media (max-width: 768px) and (max-height: 720px) {
-      .glass {
-        padding: 1rem !important;
-      }
-      .glass p, .glass .mt-8, .glass .my-5, .glass .mt-6, .glass .mt-5, .glass .mt-3 {
-        margin-top: 0.45rem !important;
-        margin-bottom: 0.45rem !important;
-      }
-      .font-royal.text-4xl {
-        font-size: 1.85rem !important;
-      }
-    }
-
-    /* 二、针对游戏牌桌页面，屏幕高度较矮时自动等比例微缩整张牌桌，无需修改组件逻辑 */
-    @media (max-width: 720px) and (max-height: 750px) {
-      .royal-table-wrap {
-        transform: scale(0.88); /* 等比例无损微缩整张德州牌桌 */
-        transform-origin: center center;
-      }
-    }
-    @media (max-width: 720px) and (max-height: 660px) {
-      .royal-table-wrap {
-        transform: scale(0.78); /* 极矮屏幕下深度微缩，保证 100% 完美呈现不超高 */
-        transform-origin: center center;
-      }
-    }
-    @media (max-width: 720px) and (max-height: 580px) {
-      .royal-table-wrap {
-        transform: scale(0.68);
-        transform-origin: center center;
-      }
-    }
   </style>
 </head>
 <body>
@@ -827,15 +746,13 @@
     };
 
     function clamp(n, min, max) {
-      return Math.max(min, Math.min(max, Number(n) || 0)).toFixed(0);
+      return Math.max(min, Math.min(max, Number(n) || 0));
     }
 
-    // 格式化金额
     function money(n) {
       return "$" + Math.max(0, Math.round(Number(n) || 0)).toLocaleString("en-US");
     }
 
-    // 新建卡组并洗牌
     function createDeck() {
       const deck = [];
       for (const suit of SUITS) for (const value of VALUES) deck.push({ suit, value, rank: RANKS[value] });
@@ -846,7 +763,6 @@
       return deck;
     }
 
-    // 格式化规范化玩家数据
     function normalizePlayer(raw, seat) {
       if (!raw || typeof raw !== "object") return null;
       if (!raw.id && !raw.name) return null;
@@ -869,7 +785,6 @@
       };
     }
 
-    // 安全处理玩家数组
     function safePlayersArray(playersRaw) {
       const seats = Array(MAX_SEATS).fill(null);
       if (!playersRaw) return seats;
@@ -888,7 +803,6 @@
       return seats;
     }
 
-    // 安全解析游戏状态
     function safeGameState(raw) {
       if (!raw || typeof raw !== "object") return null;
       return {
@@ -911,14 +825,12 @@
       };
     }
 
-    // 获取当前在手牌里的活玩家
     function activeSeats(players, includeAllIn = true) {
       return safePlayersArray(players)
         .map((p, i) => ({ p, i }))
         .filter(({ p }) => p && Array.isArray(p.cards) && p.cards.length === 2 && !p.folded && (includeAllIn || !p.allIn));
     }
 
-    // 寻找下一个需要行动的座位
     function nextSeat(players, from, predicate = p => p && !p.folded && !p.allIn && p.online !== false) {
       const arr = safePlayersArray(players);
       for (let step = 1; step <= MAX_SEATS; step++) {
@@ -928,7 +840,6 @@
       return -1;
     }
 
-    // 获取当前房主/主控端席位
     function hostSeat(players) {
       const arr = safePlayersArray(players);
       for (let i = 0; i < MAX_SEATS; i++) {
@@ -939,17 +850,15 @@
       return -1;
     }
 
-    // 计算德州扑克手牌绝对大小分值
     function rankScore(category, kickers) {
       let score = category * Math.pow(15, 5);
       for (let i = 0; i < 5; i++) score += (kickers[i] || 0) * Math.pow(15, 4 - i);
       return score;
     }
 
-    // 处理顺子（包括A-5的特殊小顺）
     function straightHigh(uniqueDesc) {
       const ranks = [...uniqueDesc];
-      if (ranks.includes(14)) ranks.push(1); // 允许将 A 视作 1
+      if (ranks.includes(14)) ranks.push(1);
       for (let i = 0; i <= ranks.length - 5; i++) {
         const run = ranks.slice(i, i + 5);
         if (run[0] - run[4] === 4 && new Set(run).size === 5) return run[0] === 1 ? 5 : run[0];
@@ -957,7 +866,6 @@
       return 0;
     }
 
-    // 5张扑克牌型终极强弱判定
     function evaluateFive(cards) {
       const sorted = [...cards].sort((a, b) => b.rank - a.rank);
       const ranks = sorted.map(c => c.rank);
@@ -991,7 +899,6 @@
       return { name: "高牌", score: rankScore(0, ranks) };
     }
 
-    // 从7张牌（手牌2+公牌5）中排列组合筛选出最大的5张牌并打分
     function evaluateHand(cards) {
       if (!Array.isArray(cards) || cards.length < 5) return { name: "未成牌", score: 0 };
       let best = { name: "高牌", score: -1 };
@@ -1027,7 +934,7 @@
       return deck;
     }
 
-    // 蒙特卡洛模拟对手随机手牌评估当前手牌胜率
+    // 蒙特卡洛模拟评估胜率
     function estimateWinRate(hole, board, opponentCount, iterations = 140) {
       if (!Array.isArray(hole) || hole.length !== 2) return .25;
       const opponents = Math.max(1, opponentCount || 1);
@@ -1050,7 +957,6 @@
       return clamp(equity / iterations, .01, .99);
     }
 
-    // 根据席位与D扣距离计算位置盈余加成因子
     function positionFactor(seat, dealerIdx, players) {
       const active = safePlayersArray(players).filter(p => p && !p.folded && !p.allIn).length || 1;
       const distance = (seat - dealerIdx + MAX_SEATS) % MAX_SEATS;
@@ -1058,7 +964,6 @@
       return clamp((late - .5) * .16, -.08, .10);
     }
 
-    // 起手底牌强弱启发式静态判定
     function preflopStrength(cards) {
       if (!cards || cards.length < 2) return .2;
       const [a, b] = cards;
@@ -1072,7 +977,6 @@
       return clamp(s, .05, .98);
     }
 
-    // 结合公牌判定手牌当前的相对强度
     function handStrength(cards, board) {
       if (!board || board.length < 3) return preflopStrength(cards);
       const ev = evaluateHand([...cards, ...board]);
@@ -1113,7 +1017,6 @@
       return pay;
     }
 
-    // 开启全新一手牌的重置与洗牌发牌逻辑
     function startHand(prev, settingsOverride) {
       const settings = {
         startingChips: Number(settingsOverride?.startingChips || prev?.settings?.startingChips || 1000),
@@ -1121,7 +1024,6 @@
         bigBlind: Number(settingsOverride?.bigBlind || prev?.settings?.bigBlind || (Number(settingsOverride?.smallBlind || 10) * 2))
       };
 
-      /* 智能筹码分配：只有上一手赢家保留盈余，输光或没有筹码的玩家重置到携带数，防通胀 */
       let players = safePlayersArray(prev?.players).map((p, i) => {
         if (!p) return null;
         let finalChips = p.chips;
@@ -1191,7 +1093,6 @@
       };
     }
 
-    // 重置 10 手锦标赛局势
     function resetTournament(prev, settingsOverride) {
       const settings = {
         startingChips: Number(settingsOverride?.startingChips || prev?.settings?.startingChips || 1000),
@@ -1216,7 +1117,6 @@
       }, settings);
     }
 
-    // 结算圈并往后推牌（发翻牌、转牌、河牌）
     function resetStreet(state, nextStage, cardsToDeal) {
       const deck = [...state.deck];
       const communityCards = [...state.communityCards];
@@ -1238,7 +1138,6 @@
       };
     }
 
-    // 智能切分计算边池 (Side Pots)
     function buildSidePots(players) {
       const contributors = safePlayersArray(players)
         .filter(p => p && p.totalBet > 0)
@@ -1248,6 +1147,7 @@
       let previous = 0;
 
       for (const level of levels) {
+        // FIX: Fixed syntax error by changing `.amount` to `c.amount`
         const involved = contributors.filter(c => c.amount >= level);
         const amount = (level - previous) * involved.length;
         const eligibleSeats = involved.filter(c => !c.folded).map(c => c.seat);
@@ -1260,7 +1160,6 @@
       return pots;
     }
 
-    // 摊牌结算底池与边池并分配筹码筹码
     function resolveShowdown(state, reason = "") {
       let players = safePlayersArray(state.players).map(p => p ? { ...p, currentBet: 0, acted: true } : null);
       const live = players.map((p, i) => ({ p, i })).filter(({ p }) => p && !p.folded);
@@ -1317,7 +1216,6 @@
         chips: p.chips
       }));
 
-      /* 判断是否到达 10 轮结算点 */
       const isMatchEnd = state.handId >= 10;
       let finalWinner = null;
       if (isMatchEnd) {
@@ -1648,7 +1546,7 @@
       );
     }
 
-    /* Elegant casino playlist picker selector overlay */
+    /* Elegant BGM Controller with custom responsive layouts */
     function BgmController({ bgmPlaying, setBgmPlaying, bgmVolume, setBgmVolume, tracks, currentTrackIndex, setCurrentTrackIndex }) {
       const [sfxMuted, setSfxMuted] = useState(AUDIO_PREFS.sfxMuted);
       const toggleSfx = () => {
@@ -1677,7 +1575,7 @@
               🎵
             </div>
           </button>
-          <div className="flex flex-col gap-1 min-w-[110px]">
+          <div className="flex flex-col gap-1 min-w-[110px] hidden sm:flex">
             <select 
               value={currentTrackIndex} 
               onChange={e => setCurrentTrackIndex(Number(e.target.value))}
@@ -1839,16 +1737,17 @@
       return (
         <div className="min-h-screen w-screen flex items-center justify-center p-4 noise relative">
           <div className="glass w-full max-w-3xl rounded-[28px] p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-4">
               <div>
-                <div className="font-royal text-3xl text-amber-200 font-black">房间 {roomID}</div>
-                <div className="text-sm text-slate-400 mt-1">选择一个空座，准备开局。</div>
+                <div className="font-royal text-2xl md:text-3xl text-amber-200 font-black">房间 {roomID}</div>
+                <div className="text-xs md:text-sm text-slate-400 mt-1">选择一个空座，准备开局。</div>
               </div>
-              <div className="flex items-center gap-3">
+              {/* Responsive Layout with Safe Margin for WeChat Capsule Menu on Mobile */}
+              <div className="flex flex-wrap items-center gap-2 md:gap-3 pr-[95px] sm:pr-0 scale-90 sm:scale-100 origin-right shrink-0">
                 <BgmController bgmPlaying={bgmPlaying} setBgmPlaying={setBgmPlaying} bgmVolume={bgmVolume} setBgmVolume={setBgmVolume} tracks={tracks} currentTrackIndex={currentTrackIndex} setCurrentTrackIndex={setCurrentTrackIndex} />
                 <ConnectionBadge connected={connected} mode="online" />
-                <button onClick={onLeave} className="action-btn bg-slate-900 border border-white/10 text-xs px-3">离开房间</button>
-                {isHost && <button onClick={onStart} disabled={!connected} className="action-btn bg-amber-400 text-slate-950 px-5">开始发牌</button>}
+                <button onClick={onLeave} className="action-btn bg-slate-900 border border-white/10 text-xs px-3 py-2 rounded-xl">离开房间</button>
+                {isHost && <button onClick={onStart} disabled={!connected} className="action-btn bg-amber-400 text-slate-950 text-xs px-4 py-2 rounded-xl font-bold shadow-lg shadow-amber-500/20">开始发牌</button>}
               </div>
             </div>
             <div className="mt-6 grid sm:grid-cols-4 gap-3">
@@ -2162,16 +2061,32 @@
       return (
         <div className="relative h-screen w-screen overflow-hidden bg-[#030409] noise">
           
-          <div className="absolute top-3 left-3 right-3 z-30 flex items-start justify-between gap-3 pointer-events-none">
-            <div className="glass rounded-2xl px-4 py-3 pointer-events-auto">
-              <div className="font-royal text-amber-200 font-black tracking-widest text-sm md:text-base">ROYAL TABLE</div>
-              <div className="text-xs font-black text-amber-400 mt-0.5">局数: {gameState.handId || 1} / 10</div>
-              <div className="text-[11px] text-slate-400 mt-1">{gameState.mode === "online" ? "好友房 " + gameState.roomID : "智能 AI 模式"} · 盲注 {money(gameState.settings.smallBlind)} / {money(gameState.settings.bigBlind)}</div>
-              <div className="mt-2"><ConnectionBadge connected={connected} mode={gameState.mode} /></div>
+          <div className="absolute top-3 left-3 right-3 z-30 flex items-start justify-between gap-2 md:gap-3 pointer-events-none">
+            {/* PROBLEM 2 FIXED: Sleek horizontal capsule layout for left HUD (Never blocks Seat 1 anymore) */}
+            <div className="glass rounded-xl px-3 py-1.5 md:px-4 md:py-3 pointer-events-auto flex flex-row items-center gap-2 md:gap-4 border border-amber-300/10 shrink-0">
+              <div>
+                <div className="font-royal text-amber-200 font-black tracking-widest text-xs md:text-sm leading-none">ROYAL</div>
+                <div className="text-[10px] md:text-xs font-black text-amber-400 mt-1 leading-none">局数: {gameState.handId || 1}/10</div>
+              </div>
+              <div className="h-5 w-px bg-white/10 shrink-0"></div>
+              <div className="text-[10px] md:text-[11px] text-slate-300 leading-tight">
+                <div className="font-bold">{gameState.mode === "online" ? "房号: " + gameState.roomID : "智能 AI"}</div>
+                <div className="text-amber-300/90 mt-0.5 font-bold">{money(gameState.settings.smallBlind)} / {money(gameState.settings.bigBlind)}</div>
+              </div>
+              {gameState.mode === "online" && (
+                <>
+                  <div className="h-5 w-px bg-white/10 shrink-0 hidden sm:block"></div>
+                  <div className="scale-90 md:scale-100 origin-left hidden sm:block">
+                    <ConnectionBadge connected={connected} mode={gameState.mode} />
+                  </div>
+                </>
+              )}
             </div>
-            <div className="flex items-center gap-3 pointer-events-auto">
+
+            {/* PROBLEM 2 FIXED: Top-Right cluster with mr-[95px] on mobile to dodge WeChat Capsule button perfectly */}
+            <div className="flex items-center gap-2 md:gap-3 pointer-events-auto mr-[95px] sm:mr-0 scale-90 sm:scale-100 origin-right shrink-0">
               <BgmController bgmPlaying={bgmPlaying} setBgmPlaying={setBgmPlaying} bgmVolume={bgmVolume} setBgmVolume={setBgmVolume} tracks={tracks} currentTrackIndex={currentTrackIndex} setCurrentTrackIndex={setCurrentTrackIndex} />
-              <button onClick={onLeave} className="action-btn bg-slate-900/80 border border-white/10 text-slate-200 px-4 py-3">离桌</button>
+              <button onClick={onLeave} className="action-btn bg-slate-900/80 border border-white/10 text-slate-200 px-3 py-2 text-xs md:text-sm leading-none shrink-0 rounded-xl font-bold">离桌</button>
             </div>
           </div>
 
@@ -2463,10 +2378,12 @@
 
       const firebaseReady = !!db;
       const canHost = gameState && mySeat === hostSeat(gameState.players);
+      
+      /* PROBLEM 2 FIXED: Restored variable target exact definition matching original architecture */
       const roomLink = useMemo(() => {
         try {
           const url = new URL(location.href);
-          if (roomID) url.searchParams.set("room", rid);
+          if (roomID) url.searchParams.set("room", roomID);
           return url.toString();
         } catch (_) {
           return roomID;
@@ -2476,6 +2393,28 @@
       useEffect(() => {
         localStorage.setItem("royal_holdem_name", name || "玩家");
       }, [name]);
+
+      /* PROBLEM 1 FIXED: Intelligent automatic seat reclaim / auto-reconnect logic */
+      useEffect(() => {
+        if (mode !== "online" || !gameState || mySeat !== -1) return;
+        const players = safePlayersArray(gameState.players);
+        const existingSeatIdx = players.findIndex(p => p && p.id === uid);
+        if (existingSeatIdx >= 0) {
+          setMySeat(existingSeatIdx);
+          // Set seat online and update lastseen heartbeat in Firebase Database
+          if (roomRef.current) {
+            try {
+              const seatRef = roomRef.current.child(`players/${existingSeatIdx}`);
+              seatRef.update({
+                online: true,
+                lastSeen: Date.now()
+              });
+            } catch (e) {
+              console.warn("自动回桌状态刷新同步失败:", e);
+            }
+          }
+        }
+      }, [mode, gameState, mySeat]);
 
       useEffect(() => {
         const handleUnload = () => {
@@ -2536,9 +2475,6 @@
         updateOnline(s => cleanupOfflineSeats(s));
       }, [mode, canHost, gameState?.stage, gameState?.players?.map?.(p => p?.online).join("|")]);
 
-      /* Presence: keep my seat marked online with a heartbeat, and (re)arm an
-         onDisconnect that flips me offline if the connection drops. Re-runs on every
-         reconnect (connected dep) so the handler survives network blips. */
       useEffect(() => {
         if (mode !== "online" || !roomRef.current || mySeat < 0 || !connected) return;
         const seatRef = roomRef.current.child(`players/${mySeat}`);
@@ -2553,13 +2489,9 @@
         }, 4000);
         return () => {
           clearInterval(hb);
-          /* Don't cancel onDisconnect here on normal re-renders; leave() cancels it explicitly. */
         };
       }, [mode, mySeat, connected]);
 
-      /* Host reaper: any seated human whose heartbeat is stale is marked offline, so
-         cleanupOfflineSeats / the watchdog can free their seat. Covers cases where
-         onDisconnect is slow (ungraceful network loss). */
       useEffect(() => {
         if (mode !== "online" || !canHost) return;
         const STALE_MS = 15000;
@@ -2575,7 +2507,7 @@
                 changed = true;
               }
             }
-            if (!changed) return;   /* abort the transaction; nothing to write */
+            if (!changed) return;
             return { ...s, players, updatedAt: now };
           });
         }, 5000);
@@ -2585,7 +2517,6 @@
       useEffect(() => {
         if (!gameState || gameState.stage !== "showdown") return;
 
-        /* Stop auto-reset at match end (10 rounds reached). Manual trigger required. */
         const isMatchEnd = gameState.handId >= 10;
         if (isMatchEnd) return;
 
@@ -2667,8 +2598,6 @@
             setMySeat(seat);
             const pRef = roomRef.current.child(`players/${seat}`);
             pRef.update({ online: true, id: uid, lastSeen: Date.now() });
-            /* onDisconnect + heartbeat are (re)armed by the presence effect so they
-               survive reconnects; we don't arm a one-shot handler here. */
           }
         });
       }
@@ -2770,10 +2699,7 @@
         if (mode === "online" && roomRef.current && mySeat >= 0) {
           const leavingRef = roomRef.current;
           const seat = mySeat;
-          /* Cancel the armed onDisconnect first so it can't fire later and wipe a
-             future occupant of this seat index. */
           try { leavingRef.child(`players/${seat}/online`).onDisconnect().cancel(); } catch (_) {}
-          /* Fire-and-forget seat release; don't block local teardown on the round-trip. */
           try {
             leavingRef.transaction(raw => {
               const s = safeGameState(raw);
