@@ -25,7 +25,9 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto; /* 允许在手机端内容超出时上下滚动大厅，防止底部按钮被切掉 */
+      -webkit-overflow-scrolling: touch; /* 保证 iOS 移动端 WebView 滚动的流畅度 */
       color: white;
       background:
         radial-gradient(circle at 20% 10%, rgba(128, 24, 42, .35), transparent 34%),
@@ -387,6 +389,87 @@
       .seat-3 { left: 95%; }
       .card-scene { --cw: 36px; --ch: 50px; }
     }
+
+    /* 【微信小程序专项适配】
+      当游戏大厅结束后，进入带有 .h-screen 类的游戏桌台组件时，
+      CSS 智能侦测并自动把全局 overflow 重置为 hidden。
+      这能完美杜绝在微信 WebView 游戏对对碰中产生的任何页面滑动与回弹晃动！
+    */
+    body:has(.h-screen) {
+      overflow: hidden !important;
+    }
+
+    /* ==================================================
+      ✨ 【新加入：全自动自适应与缩放核心配置】 ✨
+      直接通过纯 CSS 处理视口比例，完美适配各种矮屏幕、微信端 WebView
+      ==================================================
+    */
+
+    /* 一、针对移动端矮屏幕（max-height 较小），自动优雅压缩大厅/选座的间距与大小，防底部溢出截断 */
+    @media (max-width: 768px) and (max-height: 850px) {
+      .glass {
+        padding: 1.25rem !important; /* 减小内边距 */
+        border-radius: 20px !important;
+      }
+      .glass p {
+        margin-top: 0.5rem !important;
+        line-height: 1.35 !important;
+      }
+      .glass .mt-8 {
+        margin-top: 1rem !important; /* 压缩起始携带卡片间距 */
+      }
+      .glass .mt-5, .glass .my-5, .glass .mt-6, .glass .mt-3 {
+        margin-top: 0.75rem !important;
+        margin-bottom: 0.75rem !important; /* 精简按钮与输入框间距 */
+      }
+      .font-royal.text-4xl {
+        font-size: 2.25rem !important; /* 微调标题字号防止两行重叠 */
+      }
+      input {
+        padding-top: 0.6rem !important;
+        padding-bottom: 0.6rem !important;
+        border-radius: 12px !important;
+      }
+      button.action-btn {
+        padding-top: 0.65rem !important;
+        padding-bottom: 0.65rem !important;
+        border-radius: 12px !important;
+      }
+    }
+
+    /* 针对超矮屏幕手机或带厚导航栏的特殊 WebView，极速压缩间距 */
+    @media (max-width: 768px) and (max-height: 720px) {
+      .glass {
+        padding: 1rem !important;
+      }
+      .glass p, .glass .mt-8, .glass .my-5, .glass .mt-6, .glass .mt-5, .glass .mt-3 {
+        margin-top: 0.45rem !important;
+        margin-bottom: 0.45rem !important;
+      }
+      .font-royal.text-4xl {
+        font-size: 1.85rem !important;
+      }
+    }
+
+    /* 二、针对游戏牌桌页面，屏幕高度较矮时自动等比例微缩整张牌桌，无需修改组件逻辑 */
+    @media (max-width: 720px) and (max-height: 750px) {
+      .royal-table-wrap {
+        transform: scale(0.88); /* 等比例无损微缩整张德州牌桌 */
+        transform-origin: center center;
+      }
+    }
+    @media (max-width: 720px) and (max-height: 660px) {
+      .royal-table-wrap {
+        transform: scale(0.78); /* 极矮屏幕下深度微缩，保证 100% 完美呈现不超高 */
+        transform-origin: center center;
+      }
+    }
+    @media (max-width: 720px) and (max-height: 580px) {
+      .royal-table-wrap {
+        transform: scale(0.68);
+        transform-origin: center center;
+      }
+    }
   </style>
 </head>
 <body>
@@ -744,13 +827,15 @@
     };
 
     function clamp(n, min, max) {
-      return Math.max(min, Math.min(max, Number(n) || 0));
+      return Math.max(min, Math.min(max, Number(n) || 0)).toFixed(0);
     }
 
+    // 格式化金额
     function money(n) {
       return "$" + Math.max(0, Math.round(Number(n) || 0)).toLocaleString("en-US");
     }
 
+    // 新建卡组并洗牌
     function createDeck() {
       const deck = [];
       for (const suit of SUITS) for (const value of VALUES) deck.push({ suit, value, rank: RANKS[value] });
@@ -761,6 +846,7 @@
       return deck;
     }
 
+    // 格式化规范化玩家数据
     function normalizePlayer(raw, seat) {
       if (!raw || typeof raw !== "object") return null;
       if (!raw.id && !raw.name) return null;
@@ -783,6 +869,7 @@
       };
     }
 
+    // 安全处理玩家数组
     function safePlayersArray(playersRaw) {
       const seats = Array(MAX_SEATS).fill(null);
       if (!playersRaw) return seats;
@@ -801,6 +888,7 @@
       return seats;
     }
 
+    // 安全解析游戏状态
     function safeGameState(raw) {
       if (!raw || typeof raw !== "object") return null;
       return {
@@ -823,12 +911,14 @@
       };
     }
 
+    // 获取当前在手牌里的活玩家
     function activeSeats(players, includeAllIn = true) {
       return safePlayersArray(players)
         .map((p, i) => ({ p, i }))
         .filter(({ p }) => p && Array.isArray(p.cards) && p.cards.length === 2 && !p.folded && (includeAllIn || !p.allIn));
     }
 
+    // 寻找下一个需要行动的座位
     function nextSeat(players, from, predicate = p => p && !p.folded && !p.allIn && p.online !== false) {
       const arr = safePlayersArray(players);
       for (let step = 1; step <= MAX_SEATS; step++) {
@@ -838,6 +928,7 @@
       return -1;
     }
 
+    // 获取当前房主/主控端席位
     function hostSeat(players) {
       const arr = safePlayersArray(players);
       for (let i = 0; i < MAX_SEATS; i++) {
@@ -848,15 +939,17 @@
       return -1;
     }
 
+    // 计算德州扑克手牌绝对大小分值
     function rankScore(category, kickers) {
       let score = category * Math.pow(15, 5);
       for (let i = 0; i < 5; i++) score += (kickers[i] || 0) * Math.pow(15, 4 - i);
       return score;
     }
 
+    // 处理顺子（包括A-5的特殊小顺）
     function straightHigh(uniqueDesc) {
       const ranks = [...uniqueDesc];
-      if (ranks.includes(14)) ranks.push(1);
+      if (ranks.includes(14)) ranks.push(1); // 允许将 A 视作 1
       for (let i = 0; i <= ranks.length - 5; i++) {
         const run = ranks.slice(i, i + 5);
         if (run[0] - run[4] === 4 && new Set(run).size === 5) return run[0] === 1 ? 5 : run[0];
@@ -864,6 +957,7 @@
       return 0;
     }
 
+    // 5张扑克牌型终极强弱判定
     function evaluateFive(cards) {
       const sorted = [...cards].sort((a, b) => b.rank - a.rank);
       const ranks = sorted.map(c => c.rank);
@@ -897,6 +991,7 @@
       return { name: "高牌", score: rankScore(0, ranks) };
     }
 
+    // 从7张牌（手牌2+公牌5）中排列组合筛选出最大的5张牌并打分
     function evaluateHand(cards) {
       if (!Array.isArray(cards) || cards.length < 5) return { name: "未成牌", score: 0 };
       let best = { name: "高牌", score: -1 };
@@ -915,6 +1010,7 @@
       return card ? `${card.value}${card.suit}` : "";
     }
 
+    // 移除已发出的牌，构建剩余扑克卡堆
     function remainingDeck(excludedCards) {
       const excluded = new Set((excludedCards || []).filter(Boolean).map(cardKey));
       const deck = [];
@@ -931,6 +1027,7 @@
       return deck;
     }
 
+    // 蒙特卡洛模拟对手随机手牌评估当前手牌胜率
     function estimateWinRate(hole, board, opponentCount, iterations = 140) {
       if (!Array.isArray(hole) || hole.length !== 2) return .25;
       const opponents = Math.max(1, opponentCount || 1);
@@ -953,6 +1050,7 @@
       return clamp(equity / iterations, .01, .99);
     }
 
+    // 根据席位与D扣距离计算位置盈余加成因子
     function positionFactor(seat, dealerIdx, players) {
       const active = safePlayersArray(players).filter(p => p && !p.folded && !p.allIn).length || 1;
       const distance = (seat - dealerIdx + MAX_SEATS) % MAX_SEATS;
@@ -960,6 +1058,7 @@
       return clamp((late - .5) * .16, -.08, .10);
     }
 
+    // 起手底牌强弱启发式静态判定
     function preflopStrength(cards) {
       if (!cards || cards.length < 2) return .2;
       const [a, b] = cards;
@@ -973,6 +1072,7 @@
       return clamp(s, .05, .98);
     }
 
+    // 结合公牌判定手牌当前的相对强度
     function handStrength(cards, board) {
       if (!board || board.length < 3) return preflopStrength(cards);
       const ev = evaluateHand([...cards, ...board]);
@@ -1013,6 +1113,7 @@
       return pay;
     }
 
+    // 开启全新一手牌的重置与洗牌发牌逻辑
     function startHand(prev, settingsOverride) {
       const settings = {
         startingChips: Number(settingsOverride?.startingChips || prev?.settings?.startingChips || 1000),
@@ -1020,7 +1121,7 @@
         bigBlind: Number(settingsOverride?.bigBlind || prev?.settings?.bigBlind || (Number(settingsOverride?.smallBlind || 10) * 2))
       };
 
-      /* Intelligent Chip Allocation: Only last winners retain winnings, losers/broke players auto-restocked */
+      /* 智能筹码分配：只有上一手赢家保留盈余，输光或没有筹码的玩家重置到携带数，防通胀 */
       let players = safePlayersArray(prev?.players).map((p, i) => {
         if (!p) return null;
         let finalChips = p.chips;
@@ -1090,6 +1191,7 @@
       };
     }
 
+    // 重置 10 手锦标赛局势
     function resetTournament(prev, settingsOverride) {
       const settings = {
         startingChips: Number(settingsOverride?.startingChips || prev?.settings?.startingChips || 1000),
@@ -1114,6 +1216,7 @@
       }, settings);
     }
 
+    // 结算圈并往后推牌（发翻牌、转牌、河牌）
     function resetStreet(state, nextStage, cardsToDeal) {
       const deck = [...state.deck];
       const communityCards = [...state.communityCards];
@@ -1135,6 +1238,7 @@
       };
     }
 
+    // 智能切分计算边池 (Side Pots)
     function buildSidePots(players) {
       const contributors = safePlayersArray(players)
         .filter(p => p && p.totalBet > 0)
@@ -1156,6 +1260,7 @@
       return pots;
     }
 
+    // 摊牌结算底池与边池并分配筹码筹码
     function resolveShowdown(state, reason = "") {
       let players = safePlayersArray(state.players).map(p => p ? { ...p, currentBet: 0, acted: true } : null);
       const live = players.map((p, i) => ({ p, i })).filter(({ p }) => p && !p.folded);
@@ -1212,7 +1317,7 @@
         chips: p.chips
       }));
 
-      /* Calculate final standings after 10 rounds */
+      /* 判断是否到达 10 轮结算点 */
       const isMatchEnd = state.handId >= 10;
       let finalWinner = null;
       if (isMatchEnd) {
@@ -2361,7 +2466,7 @@
       const roomLink = useMemo(() => {
         try {
           const url = new URL(location.href);
-          if (roomID) url.searchParams.set("room", roomID);
+          if (roomID) url.searchParams.set("room", rid);
           return url.toString();
         } catch (_) {
           return roomID;
