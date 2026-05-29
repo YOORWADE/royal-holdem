@@ -320,6 +320,102 @@
     .action-btn:active { transform: scale(.97); }
     .action-btn:disabled { opacity: .45; filter: grayscale(1); }
 
+    .player-hand-dock {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      min-width: clamp(150px, 28vw, 230px);
+      padding: 8px 10px;
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at 12% 18%, rgba(255, 229, 138, .16), transparent 38%),
+        linear-gradient(145deg, rgba(5, 8, 13, .9), rgba(15, 23, 42, .74));
+      border: 1px solid rgba(255, 229, 138, .18);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 12px 28px rgba(0,0,0,.38);
+    }
+
+    .player-hand-cards {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 64px;
+    }
+
+    .hand-rank-pill {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: linear-gradient(90deg, rgba(250, 204, 21, .18), rgba(16, 185, 129, .12));
+      border: 1px solid rgba(250, 204, 21, .28);
+      color: #fde68a;
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .action-console {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .raise-console {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      border-radius: 14px;
+      padding: 7px 9px;
+      background: rgba(2, 6, 23, .48);
+      border: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    .raise-chip-btn {
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 10px;
+      font-weight: 900;
+      color: #fef3c7;
+      background: rgba(251, 191, 36, .13);
+      border: 1px solid rgba(251, 191, 36, .24);
+      transition: transform .12s ease, background .12s ease;
+    }
+
+    .raise-chip-btn:active { transform: scale(.96); }
+
+    @media (max-width: 720px) {
+      .player-hand-dock {
+        grid-template-columns: 1fr;
+        justify-items: center;
+        min-width: 118px;
+        gap: 4px;
+        padding: 6px 7px;
+      }
+      .player-hand-cards {
+        min-height: 54px;
+        gap: 3px;
+        transform: scale(.92);
+        transform-origin: center center;
+      }
+      .hand-rank-pill {
+        font-size: 9px;
+        padding: 3px 7px;
+      }
+      .action-console {
+        gap: 5px;
+      }
+      .raise-console {
+        grid-template-columns: 1fr;
+        gap: 5px;
+        padding: 6px;
+      }
+    }
+
     .showdown-layer {
       z-index: 9000;
       background:
@@ -549,30 +645,41 @@
         const now = ctx.currentTime;
 
         switch (type) {
-          case 'deal': { /* Swish sound for card dealing */
-            const bufferSize = ctx.sampleRate * 0.12;
+          case 'deal': { /* Paper card sliding across felt */
+            const bufferSize = ctx.sampleRate * 0.18;
             const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) {
-              data[i] = Math.random() * 2 - 1;
+              const env = 1 - i / bufferSize;
+              data[i] = (Math.random() * 2 - 1) * env;
             }
             const noise = ctx.createBufferSource();
             noise.buffer = buffer;
 
             const filter = ctx.createBiquadFilter();
             filter.type = 'bandpass';
-            filter.frequency.setValueAtTime(1400, now);
-            filter.frequency.exponentialRampToValueAtTime(320, now + 0.1);
-            filter.Q.setValueAtTime(2.6, now);
+            filter.frequency.setValueAtTime(2200, now);
+            filter.frequency.exponentialRampToValueAtTime(560, now + 0.16);
+            filter.Q.setValueAtTime(3.2, now);
 
             const gain = ctx.createGain();
-            gain.gain.setValueAtTime(0.36, now);
-            gain.gain.linearRampToValueAtTime(0.001, now + 0.12);
+            gain.gain.setValueAtTime(0.44, now);
+            gain.gain.linearRampToValueAtTime(0.001, now + 0.18);
 
             noise.connect(filter);
             filter.connect(gain);
             gain.connect(masterGain);
             noise.start(now);
+            [0.035, 0.095].forEach((offset, idx) => {
+              const tap = ctx.createOscillator();
+              const tapGain = ctx.createGain();
+              tap.type = 'triangle';
+              tap.frequency.setValueAtTime(idx ? 420 : 520, now + offset);
+              tapGain.gain.setValueAtTime(0.16, now + offset);
+              tapGain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.035);
+              tap.connect(tapGain); tapGain.connect(masterGain);
+              tap.start(now + offset); tap.stop(now + offset + 0.04);
+            });
             break;
           }
           case 'flip': { /* Crisp double card flip click */
@@ -593,22 +700,20 @@
             playTap(now + 0.04, 480);
             break;
           }
-          case 'chips': { /* Clinking clay casino chips */
+          case 'chips': { /* Several clay chips clacking and settling */
             const playClick = (time, pitch) => {
               const osc = ctx.createOscillator();
               const gain = ctx.createGain();
               osc.type = 'sine';
               osc.frequency.setValueAtTime(pitch, time);
-              gain.gain.setValueAtTime(0.72, time);
-              gain.gain.exponentialRampToValueAtTime(0.001, time + 0.026);
+              gain.gain.setValueAtTime(0.62, time);
+              gain.gain.exponentialRampToValueAtTime(0.001, time + 0.032);
               osc.connect(gain);
               gain.connect(masterGain);
               osc.start(time);
-              osc.stop(time + 0.035);
+              osc.stop(time + 0.04);
             };
-            playClick(now, 2900);
-            playClick(now + 0.025, 3200);
-            playClick(now + 0.05, 2400);
+            [2900, 3300, 2350, 3650, 2100].forEach((pitch, i) => playClick(now + i * 0.022, pitch + Math.random() * 120));
             break;
           }
           case 'fold': { /* High-pass card slide/rustle sound */
@@ -653,8 +758,8 @@
             knock(now + 0.11);
             break;
           }
-          case 'allin': { /* Epic chip shove cascade with dramatic rising sweep */
-            for (let i = 0; i < 9; i++) {
+          case 'allin': { /* Chip shove cascade + surprised table gasp */
+            for (let i = 0; i < 14; i++) {
               const playClick = (time, pitch) => {
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
@@ -680,6 +785,21 @@
             gain.connect(masterGain);
             osc.start(now);
             osc.stop(now + 0.38);
+
+            const gasp = ctx.createOscillator();
+            const gaspFilter = ctx.createBiquadFilter();
+            const gaspGain = ctx.createGain();
+            gasp.type = 'sawtooth';
+            gasp.frequency.setValueAtTime(310, now + 0.08);
+            gasp.frequency.exponentialRampToValueAtTime(520, now + 0.26);
+            gaspFilter.type = 'bandpass';
+            gaspFilter.frequency.setValueAtTime(760, now + 0.08);
+            gaspFilter.Q.setValueAtTime(5.5, now + 0.08);
+            gaspGain.gain.setValueAtTime(0.001, now + 0.08);
+            gaspGain.gain.exponentialRampToValueAtTime(0.18, now + 0.12);
+            gaspGain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+            gasp.connect(gaspFilter); gaspFilter.connect(gaspGain); gaspGain.connect(masterGain);
+            gasp.start(now + 0.08); gasp.stop(now + 0.36);
             break;
           }
           case 'win': { /* Triumphant ascending arpeggio + shimmer for pot award */
@@ -985,6 +1105,35 @@
                 if (ev.score > best.score) best = ev;
       }
       return best;
+    }
+
+    function describeHoleCards(hole, board = []) {
+      if (!Array.isArray(hole) || hole.length < 2) {
+        return { name: "等待发牌", detail: "手牌未就绪" };
+      }
+      const [a, b] = hole;
+      const cards = [...hole, ...(board || [])].filter(Boolean);
+      if ((board || []).length >= 3 && cards.length >= 5) {
+        const ev = evaluateHand(cards);
+        return { name: ev.name, detail: `${ev.name} · 当前最佳牌型` };
+      }
+
+      const hi = a.rank >= b.rank ? a : b;
+      const lo = a.rank >= b.rank ? b : a;
+      const suited = a.suit === b.suit;
+      const gap = Math.abs(a.rank - b.rank);
+      const broadway = a.rank >= 10 && b.rank >= 10;
+
+      if (a.rank === b.rank) {
+        const tier = a.rank >= 11 ? "高口袋对子" : a.rank >= 7 ? "中口袋对子" : "小口袋对子";
+        return { name: "一对", detail: `${tier} · ${a.value}${b.value}` };
+      }
+      if (broadway && suited) return { name: "同花大牌", detail: `${hi.value}${lo.value} 同花 · 强起手` };
+      if (broadway) return { name: "两张大牌", detail: `${hi.value}${lo.value} · 可争顶对` };
+      if (suited && gap <= 2) return { name: "同花连张", detail: `${hi.value}${lo.value} 同花 · 有顺/同花潜力` };
+      if (suited) return { name: "同花牌", detail: `${hi.value}${lo.value} 同花` };
+      if (gap === 1) return { name: "连张", detail: `${hi.value}${lo.value} · 有顺子潜力` };
+      return { name: "高牌", detail: `${hi.value} 高牌` };
     }
 
     function cardKey(card) {
@@ -1690,6 +1839,7 @@
       }, [gameState?.tableReaction?.id, index]);
 
       const avatar = player.isAI ? ["D", "P", "T"][index - 1] || "AI" : (player.name || "玩").slice(0, 1).toUpperCase();
+      const handInfo = isMe ? describeHoleCards(player.cards, gameState?.communityCards) : null;
       return (
         <div className={`seat seat-${index}`}>
           <div className={"pod " + (isTurn ? "active" : "") + (player.folded ? " opacity-60" : "")}>
@@ -1728,6 +1878,11 @@
             <div className="mt-2 flex justify-center gap-1 min-h-[48px]">
               {(player.cards || []).map((c, k) => <CardView key={k} card={c} hidden={!showCards || player.folded} size="sm" delay={k * 90} />)}
             </div>
+            {isMe && (player.cards || []).length > 0 && !player.folded && (
+              <div className="mt-1 text-center">
+                <span className="hand-rank-pill max-w-full">{handInfo.name}</span>
+              </div>
+            )}
             {player.currentBet > 0 && (
               <div className="absolute left-1/2 -translate-x-1/2 -bottom-12">
                 <ChipStack value={player.currentBet} compact />
@@ -2016,12 +2171,14 @@
       const maxTotal = me ? me.currentBet + me.chips : 0;
       const minRaiseTotal = me ? Math.min(maxTotal, Math.max(gameState.settings.bigBlind, gameState.currentBet + gameState.minRaise)) : 0;
       const canRaise = isMyTurn && me && me.chips > toCall && maxTotal > gameState.currentBet;
+      const heroHandInfo = describeHoleCards(me?.cards || [], gameState.communityCards || []);
       
       const quickRaise = ratio => {
         if (!canRaise) return;
         const target = ratio === "allin"
           ? maxTotal
           : Math.min(maxTotal, Math.max(minRaiseTotal, Math.round((gameState.currentBet + gameState.pot * ratio) / 10) * 10));
+        playSFX(ratio === "allin" ? 'allin' : 'chips');
         onAction("RAISE", target);
       };
 
@@ -2169,7 +2326,7 @@
                   const isMePod = i === mySeat;
                   const participantIndex = showdownParticipants.findIndex(sp => sp.seat === i);
                   const hasSeqRevealed = seqIndex >= participantIndex && seqIndex !== -1 && participantIndex !== -1;
-                  const showCards = gameState.stage === "showdown" ? (isMePod || hasSeqRevealed) : false;
+                  const showCards = isMePod || (gameState.stage === "showdown" ? hasSeqRevealed : false);
                   const isWinnerSeq = seqIndex === showdownParticipants.length && gameState.winnerIds?.includes(p?.id);
 
                   return (
@@ -2301,14 +2458,17 @@
               <div className="flex flex-row items-center gap-2 md:gap-4 justify-between">
                 
                 {me && (me.cards || []).length > 0 && (
-                  <div className="flex flex-col items-center justify-center shrink-0 bg-black/45 px-2 py-1 md:py-2 rounded-xl border border-white/5">
-                    <span className="text-[9px] font-black tracking-wider text-amber-200/80 mb-1 leading-none uppercase">手牌</span>
-                    <div className="flex -space-x-3.5 sm:-space-x-3 justify-center scale-90 sm:scale-100 origin-center">
+                  <div className="player-hand-dock shrink-0">
+                    <div className="player-hand-cards">
                       {(me.cards || []).map((card, idx) => (
-                        <div key={idx} className="relative drop-shadow-md">
-                          <CardView card={card} hidden={false} size="sm" delay={idx * 80} />
+                        <div key={idx} className="relative drop-shadow-xl">
+                          <CardView card={card} hidden={false} size="md" delay={idx * 80} />
                         </div>
                       ))}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[9px] font-black tracking-[.22em] text-amber-200/70 leading-none uppercase">我的手牌</div>
+                      <div className="mt-1 hand-rank-pill">{heroHandInfo.detail}</div>
                     </div>
                   </div>
                 )}
@@ -2324,12 +2484,12 @@
                       )}
                     </div>
                   ) : isMyTurn ? (
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <div className="timer-track h-1"><div className="timer-fill" style={{ width: `${remaining / TURN_SECONDS * 100}%` }}></div></div>
                       
                       {canRaise && (
-                        <div className="flex items-center gap-2 bg-black/[0.3] rounded-xl px-2 py-1">
-                          <span className="text-[10px] text-slate-400 whitespace-nowrap">加注到</span>
+                        <div className="raise-console">
+                          <span className="text-[10px] text-slate-400 whitespace-nowrap font-black">加注</span>
                           <input 
                             type="range" 
                             min={minRaiseTotal} 
@@ -2339,11 +2499,16 @@
                             onChange={e => setRaiseTo(Number(e.target.value))} 
                             className="flex-1 h-1 accent-amber-400 cursor-pointer" 
                           />
-                          <span className="w-16 text-right text-amber-200 font-black text-xs">{money(clamp(raiseTo, minRaiseTotal, maxTotal))}</span>
+                          <span className="text-right text-amber-200 font-black text-xs">{money(clamp(raiseTo, minRaiseTotal, maxTotal))}</span>
+                          <div className="col-span-full flex justify-end gap-1.5">
+                            <button onClick={() => quickRaise(.5)} className="raise-chip-btn">1/2 POT</button>
+                            <button onClick={() => quickRaise(1)} className="raise-chip-btn">POT</button>
+                            <button onClick={() => quickRaise("allin")} className="raise-chip-btn !text-rose-100 !bg-rose-500/20 !border-rose-300/30">ALL-IN</button>
+                          </div>
                         </div>
                       )}
                       
-                      <div className="grid grid-cols-3 gap-1.5">
+                      <div className="action-console">
                         <button onClick={() => onAction("FOLD")} className="action-btn py-1.5 md:py-2.5 rounded-xl bg-gradient-to-r from-rose-950 to-red-800 text-white text-xs font-black leading-tight">
                           FOLD <span className="text-[9px] font-normal block sm:inline sm:ml-1 opacity-70">弃牌</span>
                         </button>
@@ -2387,13 +2552,9 @@
                     </button>
                   ))}
                 </div>
-                {isMyTurn && canRaise && (
-                  <div className="flex gap-1">
-                    <button onClick={() => quickRaise(.5)} className="rounded-full bg-amber-400/15 border border-amber-300/30 px-2 py-0.5 text-[9px] text-amber-100 font-bold">1/2 POT</button>
-                    <button onClick={() => quickRaise(1)} className="rounded-full bg-amber-400/15 border border-amber-300/30 px-2 py-0.5 text-[9px] text-amber-100 font-bold">POT</button>
-                    <button onClick={() => quickRaise("allin")} className="rounded-full bg-rose-500/20 border border-rose-300/30 px-2 py-0.5 text-[9px] text-rose-100 font-bold">ALL-IN</button>
-                  </div>
-                )}
+                <div className="text-[10px] text-slate-500 font-bold">
+                  {isMyTurn ? `轮到你 · ${remaining}s` : "保持观察，等待行动"}
+                </div>
               </div>
 
             </div>
