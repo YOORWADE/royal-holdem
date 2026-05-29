@@ -917,7 +917,6 @@
       return card ? `${card.value}${card.suit}` : "";
     }
 
-    // 移除已发出的牌，构建剩余扑克卡堆
     function remainingDeck(excludedCards) {
       const excluded = new Set((excludedCards || []).filter(Boolean).map(cardKey));
       const deck = [];
@@ -934,7 +933,6 @@
       return deck;
     }
 
-    // 蒙特卡洛模拟评估胜率
     function estimateWinRate(hole, board, opponentCount, iterations = 140) {
       if (!Array.isArray(hole) || hole.length !== 2) return .25;
       const opponents = Math.max(1, opponentCount || 1);
@@ -1147,7 +1145,6 @@
       let previous = 0;
 
       for (const level of levels) {
-        // FIX: Fixed syntax error by changing `.amount` to `c.amount`
         const involved = contributors.filter(c => c.amount >= level);
         const amount = (level - previous) * involved.length;
         const eligibleSeats = involved.filter(c => !c.folded).map(c => c.seat);
@@ -1900,8 +1897,6 @@
       const [activeChatTab, setActiveChatTab] = useState("presets");
 
       const [seqIndex, setSeqIndex] = useState(-1);
-      const [showRaisePop, setShowRaisePop] = useState(false);
-      const [showQuickEmoji, setShowQuickEmoji] = useState(false);
 
       const quickChats = [
         "不要走，决战到天亮！",
@@ -1944,16 +1939,7 @@
       const maxTotal = me ? me.currentBet + me.chips : 0;
       const minRaiseTotal = me ? Math.min(maxTotal, Math.max(gameState.settings.bigBlind, gameState.currentBet + gameState.minRaise)) : 0;
       const canRaise = isMyTurn && me && me.chips > toCall && maxTotal > gameState.currentBet;
-
-      /* Collapse the raise popover whenever it's no longer the player's turn,
-         so the next time they have to act they start from the compact view. */
-      useEffect(() => {
-        if (!isMyTurn) {
-          setShowRaisePop(false);
-          setShowQuickEmoji(false);
-        }
-      }, [isMyTurn, gameState.handId, gameState.currentTurn]);
-
+      
       const quickRaise = ratio => {
         if (!canRaise) return;
         const target = ratio === "allin"
@@ -2101,7 +2087,7 @@
             </div>
           </div>
 
-          <div className="absolute inset-x-0 top-[10%] bottom-[22%] md:bottom-[26%] flex items-center justify-center pointer-events-none z-10">
+          <div className="absolute inset-x-0 top-[10%] bottom-[33%] flex items-center justify-center pointer-events-none z-10">
             <div className="royal-table-wrap pointer-events-auto">
               <div className="royal-table">
                 <div className="gold-bracket left-[8%] top-[10%] border-l-2 border-t-2 rounded-tl-3xl"></div>
@@ -2179,7 +2165,7 @@
           </div>
 
           {showChatPanel && (
-            <div className="fixed bottom-[150px] md:bottom-28 left-1/2 md:left-4 -translate-x-1/2 md:translate-x-0 w-[94vw] md:w-80 glass rounded-[24px] p-4 z-50 flex flex-col border border-amber-300/30 shadow-2xl animate-fade-in pointer-events-auto">
+            <div className="fixed bottom-[180px] md:bottom-32 left-1/2 md:left-4 -translate-x-1/2 md:translate-x-0 w-[94vw] md:w-80 glass rounded-[24px] p-4 z-50 flex flex-col border border-amber-300/30 shadow-2xl animate-fade-in pointer-events-auto">
               <div className="flex items-center justify-between border-b border-white/10 pb-2">
                 <div className="flex gap-4">
                   <button 
@@ -2233,114 +2219,122 @@
             </div>
           )}
 
-          {/* Compact action HUD. Three logical zones, stacked top→bottom:
-              1. INFO strip  — hand cards (left)   · broadcast log (center) · chat icon (right)
-              2. ACTION zone — timer + main buttons (only when it's your turn); optional inline raise popover above buttons
-              3. STATUS line — passive message when waiting / opponents acting (replaces zone 2)
-              Quick-reactions (emojis) and 1/2-POT shortcuts no longer occupy their own row — they're
-              tucked behind toggles ("😀" near chat, raise shortcuts inside the raise popover). */}
-          <div className="fixed left-1/2 -translate-x-1/2 bottom-2 z-40 w-[min(98vw,680px)] pointer-events-auto">
-            <div className="glass rounded-2xl p-2 md:p-3">
-
-              {/* Zone 1 — info strip */}
-              <div className="flex items-center gap-2 mb-1.5">
-                {me && (me.cards || []).length > 0 ? (
-                  <div className="flex gap-1 shrink-0 items-center">
-                    <span className="text-[8px] font-black tracking-[0.18em] text-amber-200/70 leading-none hidden sm:inline">HAND</span>
-                    {(me.cards || []).map((card, idx) => (
-                      <CardView key={idx} card={card} hidden={false} size="sm" delay={idx * 80} />
-                    ))}
-                  </div>
-                ) : <div className="shrink-0 w-1" />}
-
-                {gameState.actionLog?.length > 0 ? (
-                  <div className="flex-1 min-w-0 text-center text-[10px] md:text-[11px] font-bold text-amber-200/85 truncate bg-black/35 border border-white/5 rounded-full py-1 px-2">
-                    📢 {gameState.actionLog[gameState.actionLog.length - 1]}
-                  </div>
-                ) : <div className="flex-1" />}
-
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => { playSFX('button'); setShowQuickEmoji(v => !v); }}
-                    className={"rounded-full border w-8 h-8 grid place-items-center text-base active:scale-90 transition " + (showQuickEmoji ? "bg-amber-400/25 border-amber-300/60 text-amber-100" : "bg-slate-900/70 border-white/10 text-slate-200")}
-                    title="快捷表情"
-                  >😀</button>
-                  <button
-                    onClick={() => { playSFX('button'); setShowChatPanel(!showChatPanel); }}
-                    className="rounded-full bg-gradient-to-r from-amber-400/25 to-yellow-500/25 border border-amber-300/40 w-8 h-8 grid place-items-center text-base text-amber-200 active:scale-90 transition"
-                    title="聊天互动"
-                  >💬</button>
-                </div>
-              </div>
-
-              {/* Inline quick-emoji bar — only when toggled */}
-              {showQuickEmoji && (
-                <div className="mb-1.5 flex flex-wrap gap-1 justify-center bg-black/25 border border-white/5 rounded-xl px-2 py-1.5">
-                  {["👍", "🔥", "🤔", "👏", "😱", "💪", "漂亮", "GG"].map(text => (
-                    <button
-                      key={text}
-                      onClick={() => { onTableMessage(text); setShowQuickEmoji(false); }}
-                      className="rounded-full bg-slate-900/80 border border-white/10 px-2 py-1 text-xs text-slate-200 active:scale-95 transition"
-                    >{text}</button>
-                  ))}
+          {/* PROBLEM 2 FIXED: Beautiful Ultra-Compact flat action desk to prevent blocking Seat 0 */}
+          <div className="fixed left-1/2 -translate-x-1/2 bottom-3 z-40 w-[min(96vw,680px)]">
+            <div className="relative glass rounded-[20px] p-2 md:p-4 shadow-2xl border border-white/10">
+              
+              {/* Floating Action Log Pill (Occupies 0 card layout height!) */}
+              {gameState.actionLog?.length > 0 && (
+                <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-center text-[10px] md:text-[11px] font-bold text-amber-200/95 truncate bg-slate-950/95 border border-amber-300/20 rounded-full py-0.5 px-3.5 shadow-lg max-w-[90vw] whitespace-nowrap z-50">
+                  📢 {gameState.actionLog[gameState.actionLog.length - 1]}
                 </div>
               )}
 
-              {/* Zone 2/3 — action or status */}
-              {gameState.stage === "waiting" ? (
-                <div className="flex items-center justify-between gap-3 py-1">
-                  <div className="text-xs md:text-sm text-slate-300 truncate">等待房主开局或更多玩家入座。</div>
-                  {canHost && <button onClick={onNextHand} className="action-btn bg-amber-400 text-slate-950 px-3 py-1.5 text-xs md:text-sm whitespace-nowrap shrink-0">开始发牌</button>}
-                </div>
-              ) : isMyTurn ? (
-                <div>
-                  <div className="timer-track mb-1.5"><div className="timer-fill" style={{ width: `${remaining / TURN_SECONDS * 100}%` }}></div></div>
+              {/* Responsive main horizontal container */}
+              <div className="flex flex-row items-center gap-2 md:gap-4 justify-between">
+                
+                {/* Left Side: Pocket Cards (Beautifully overlapping to save horizontal/vertical margins) */}
+                {me && (me.cards || []).length > 0 && (
+                  <div className="flex flex-col items-center justify-center shrink-0 bg-black/45 px-2 py-1 md:py-2 rounded-xl border border-white/5">
+                    <span className="text-[9px] font-black tracking-wider text-amber-200/80 mb-1 leading-none uppercase">手牌</span>
+                    <div className="flex -space-x-3.5 sm:-space-x-3 justify-center scale-90 sm:scale-100 origin-center">
+                      {(me.cards || []).map((card, idx) => (
+                        <div key={idx} className="relative drop-shadow-md">
+                          <CardView card={card} hidden={false} size="sm" delay={idx * 80} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                  {/* Raise popover — opens above the buttons when RAISE is tapped first */}
-                  {showRaisePop && canRaise && (
-                    <div className="mb-1.5 flex items-center gap-1.5 bg-black/45 border border-amber-300/25 rounded-xl px-2 py-1.5">
-                      <input
-                        type="range"
-                        min={minRaiseTotal}
-                        max={maxTotal}
-                        step="10"
-                        value={clamp(raiseTo, minRaiseTotal, maxTotal)}
-                        onChange={e => setRaiseTo(Number(e.target.value))}
-                        className="flex-1 accent-amber-400 min-w-0"
-                      />
-                      <span className="w-14 text-right text-amber-200 font-black text-[11px] shrink-0">{money(clamp(raiseTo, minRaiseTotal, maxTotal))}</span>
-                      <button onClick={() => quickRaise(.5)} className="rounded-md bg-amber-400/15 border border-amber-300/30 px-1.5 py-0.5 text-[10px] text-amber-100 shrink-0">½</button>
-                      <button onClick={() => quickRaise(1)} className="rounded-md bg-amber-400/15 border border-amber-300/30 px-1.5 py-0.5 text-[10px] text-amber-100 shrink-0">POT</button>
-                      <button onClick={() => quickRaise("allin")} className="rounded-md bg-rose-500/20 border border-rose-300/30 px-1.5 py-0.5 text-[10px] text-rose-100 shrink-0">ALL</button>
+                {/* Right Side: Action bar or current status */}
+                <div className="flex-1 min-w-0">
+                  {gameState.stage === "waiting" ? (
+                    <div className="flex items-center justify-between gap-2 py-1">
+                      <div className="text-xs md:text-sm text-slate-300 truncate">等待房主开局或更多玩家入座...</div>
+                      {canHost && (
+                        <button onClick={onNextHand} className="action-btn bg-amber-400 text-slate-950 text-xs py-1.5 px-4 font-black rounded-lg">
+                          开始发牌
+                        </button>
+                      )}
+                    </div>
+                  ) : isMyTurn ? (
+                    <div className="space-y-1.5">
+                      {/* Compact Timer Bar */}
+                      <div className="timer-track h-1"><div className="timer-fill" style={{ width: `${remaining / TURN_SECONDS * 100}%` }}></div></div>
+                      
+                      {/* Ultra Compact Slider */}
+                      {canRaise && (
+                        <div className="flex items-center gap-2 bg-black/[0.3] rounded-xl px-2 py-1">
+                          <span className="text-[10px] text-slate-400 whitespace-nowrap">加注到</span>
+                          <input 
+                            type="range" 
+                            min={minRaiseTotal} 
+                            max={maxTotal} 
+                            step="10" 
+                            value={clamp(raiseTo, minRaiseTotal, maxTotal)} 
+                            onChange={e => setRaiseTo(Number(e.target.value))} 
+                            className="flex-1 h-1 accent-amber-400 cursor-pointer" 
+                          />
+                          <span className="w-16 text-right text-amber-200 font-black text-xs">{money(clamp(raiseTo, minRaiseTotal, maxTotal))}</span>
+                        </div>
+                      )}
+                      
+                      {/* Compact Action Buttons Grid */}
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button onClick={() => onAction("FOLD")} className="action-btn py-1.5 md:py-2.5 rounded-xl bg-gradient-to-r from-rose-950 to-red-800 text-white text-xs font-black leading-tight">
+                          FOLD <span className="text-[9px] font-normal block sm:inline sm:ml-1 opacity-70">弃牌</span>
+                        </button>
+                        <button onClick={() => onAction("CALL")} className="action-btn py-1.5 md:py-2.5 rounded-xl bg-gradient-to-r from-emerald-700 to-teal-700 text-white text-xs font-black leading-tight">
+                          {toCall ? `CALL ${money(toCall)}` : "CHECK"} <span className="text-[9px] font-normal block sm:inline sm:ml-1 opacity-70">{toCall ? "跟注" : "过牌"}</span>
+                        </button>
+                        <button 
+                          onClick={() => onAction("RAISE", clamp(raiseTo, minRaiseTotal, maxTotal))} 
+                          disabled={!canRaise} 
+                          className="action-btn py-1.5 md:py-2.5 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-500 to-amber-700 text-slate-950 text-xs font-black leading-tight"
+                        >
+                          RAISE <span className="text-[9px] font-black block sm:inline sm:ml-1 opacity-70">加注</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-2.5 text-center text-xs md:text-sm text-slate-400 font-black flex flex-col items-center justify-center gap-1">
+                      <div className="text-amber-200/90 text-xs">
+                        {gameState.stage === "showdown" ? "正在现场亮牌比拼..." : `等待 ${players[gameState.currentTurn]?.name || "玩家"} 行动`}
+                      </div>
+                      {gameState.stage !== "showdown" && (
+                        <span className="text-[10px] text-slate-500">剩余思考时间: {remaining}s</span>
+                      )}
                     </div>
                   )}
+                </div>
 
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <button onClick={() => onAction("FOLD")} className="action-btn bg-gradient-to-r from-rose-950 to-red-800 text-white py-2 text-sm leading-tight">FOLD<span className="block text-[9px] opacity-70 font-normal">弃牌</span></button>
-                    <button onClick={() => onAction("CALL")} className="action-btn bg-gradient-to-r from-emerald-700 to-teal-700 text-white py-2 text-sm leading-tight">{toCall ? "CALL " + money(toCall) : "CHECK"}<span className="block text-[9px] opacity-70 font-normal">{toCall ? "跟注" : "看牌"}</span></button>
-                    <button
-                      onClick={() => {
-                        if (!canRaise) return;
-                        if (showRaisePop) {
-                          onAction("RAISE", clamp(raiseTo, minRaiseTotal, maxTotal));
-                          setShowRaisePop(false);
-                        } else {
-                          setShowRaisePop(true);
-                        }
-                      }}
-                      disabled={!canRaise}
-                      className="action-btn bg-gradient-to-r from-amber-300 via-yellow-500 to-amber-700 text-slate-950 py-2 text-sm leading-tight"
-                    >
-                      {showRaisePop ? "确认" : "RAISE"}
-                      <span className="block text-[9px] opacity-70 font-normal">{showRaisePop ? money(clamp(raiseTo, minRaiseTotal, maxTotal)) : "加注"}</span>
+              </div>
+
+              {/* Compact Bottom Utility Row */}
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-white/10 pt-2">
+                <div className="flex gap-1 items-center">
+                  <button 
+                    onClick={() => { playSFX('button'); setShowChatPanel(!showChatPanel); }} 
+                    className="rounded-full bg-gradient-to-r from-amber-400/20 to-yellow-500/20 border border-amber-300/40 px-2.5 py-0.5 text-[10px] text-amber-200 font-black active:scale-95 transition flex items-center gap-1 shrink-0"
+                  >
+                    💬 聊天
+                  </button>
+                  {["👍", "🔥", "漂亮"].map(text => (
+                    <button key={text} onClick={() => onTableMessage(text)} className="rounded-full bg-slate-900/80 border border-white/10 px-2 py-0.5 text-[10px] text-slate-200 active:scale-95 transition">
+                      {text}
                     </button>
+                  ))}
+                </div>
+                {isMyTurn && canRaise && (
+                  <div className="flex gap-1">
+                    <button onClick={() => quickRaise(.5)} className="rounded-full bg-amber-400/15 border border-amber-300/30 px-2 py-0.5 text-[9px] text-amber-100 font-bold">1/2 POT</button>
+                    <button onClick={() => quickRaise(1)} className="rounded-full bg-amber-400/15 border border-amber-300/30 px-2 py-0.5 text-[9px] text-amber-100 font-bold">POT</button>
+                    <button onClick={() => quickRaise("allin")} className="rounded-full bg-rose-500/20 border border-rose-300/30 px-2 py-0.5 text-[9px] text-rose-100 font-bold">ALL-IN</button>
                   </div>
-                </div>
-              ) : (
-                <div className="py-1.5 text-center text-xs text-slate-400 truncate">
-                  {gameState.stage === "showdown" ? "正在现场亮牌比拼..." : `轮到 ${players[gameState.currentTurn]?.name || "玩家"} 行动 · ${remaining}s`}
-                </div>
-              )}
+                )}
+              </div>
+
             </div>
           </div>
 
