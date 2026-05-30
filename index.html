@@ -1090,9 +1090,28 @@
       return deck;
     }
 
+    function investedOf(player) {
+      return Math.max(0, Number(player?.totalInvested) || 0, Number(player?.totalBet) || 0);
+    }
+
+    function computeCommittedPot(players, deadPot = 0) {
+      return safePlayersArray(players).reduce((sum, p) => sum + investedOf(p), Math.max(0, Number(deadPot) || 0));
+    }
+
+    function seatsClockwiseFromDealer(dealerIdx, seats) {
+      const wanted = new Set((seats || []).map(Number));
+      const ordered = [];
+      for (let step = 1; step <= MAX_SEATS; step++) {
+        const seat = ((Number(dealerIdx) || 0) + step) % MAX_SEATS;
+        if (wanted.has(seat)) ordered.push(seat);
+      }
+      return ordered;
+    }
+
     function normalizePlayer(raw, seat) {
       if (!raw || typeof raw !== "object") return null;
       if (!raw.id && !raw.name) return null;
+      const totalInvested = Math.max(0, Number(raw.totalInvested ?? raw.totalBet) || 0);
       return {
         id: String(raw.id || ("seat_" + seat)),
         name: String(raw.name || ("玩家" + (seat + 1))).slice(0, 12),
@@ -1102,7 +1121,8 @@
         chips: Math.max(0, Number(raw.chips) || 0),
         cards: Array.isArray(raw.cards) ? raw.cards.filter(Boolean) : [],
         currentBet: Math.max(0, Number(raw.currentBet) || 0),
-        totalBet: Math.max(0, Number(raw.totalBet) || 0),
+        totalBet: totalInvested,
+        totalInvested,
         folded: !!raw.folded,
         allIn: !!raw.allIn,
         online: raw.online !== false,
@@ -1141,6 +1161,8 @@
           bigBlind: Number(raw.settings?.bigBlind) || (Number(raw.settings?.smallBlind) || 10) * 2
         },
         deadPot: Math.max(0, Number(raw.deadPot) || 0),
+        pot: Math.max(0, Number(raw.pot) || 0),
+        pots: Array.isArray(raw.pots) ? raw.pots : [],
         deck: Array.isArray(raw.deck) ? raw.deck : [],
         communityCards: Array.isArray(raw.communityCards) ? raw.communityCards : [],
         actionLog: Array.isArray(raw.actionLog) ? raw.actionLog.slice(-8) : [],
@@ -1148,7 +1170,13 @@
         showdownResults: Array.isArray(raw.showdownResults) ? raw.showdownResults : null,
         winnerIds: Array.isArray(raw.winnerIds) ? raw.winnerIds : [],
         finalWinnerId: raw.finalWinnerId || null,
-        finalWinnerName: raw.finalWinnerName || ""
+        finalWinnerName: raw.finalWinnerName || "",
+        stage: raw.stage || raw.street || "waiting",
+        street: raw.stage || raw.street || "waiting",
+        dealerIdx: Number.isInteger(raw.dealerIdx) ? raw.dealerIdx : Number.isInteger(raw.dealerPosition) ? raw.dealerPosition : 0,
+        dealerPosition: Number.isInteger(raw.dealerPosition) ? raw.dealerPosition : Number.isInteger(raw.dealerIdx) ? raw.dealerIdx : 0,
+        currentTurn: Number.isInteger(raw.currentTurn) ? raw.currentTurn : Number.isInteger(raw.currentPlayer) ? raw.currentPlayer : -1,
+        currentPlayer: Number.isInteger(raw.currentPlayer) ? raw.currentPlayer : Number.isInteger(raw.currentTurn) ? raw.currentTurn : -1
       };
     }
 
@@ -1349,6 +1377,7 @@
         cards: [],
         currentBet: 0,
         totalBet: 0,
+        totalInvested: 0,
         folded: false,
         allIn: false,
         acted: false,
@@ -1361,14 +1390,15 @@
 
     function blankHandPlayer(p) {
       if (!p) return null;
-      return { ...p, cards: [], currentBet: 0, totalBet: 0, folded: false, allIn: false, acted: false, lastMove: "" };
+      return { ...p, cards: [], currentBet: 0, totalBet: 0, totalInvested: 0, folded: false, allIn: false, acted: false, lastMove: "" };
     }
 
     function postBlind(player, blind) {
-      const pay = Math.min(player.chips, blind);
+      const pay = Math.max(0, Math.min(Number(player.chips) || 0, Number(blind) || 0));
       player.chips -= pay;
       player.currentBet += pay;
       player.totalBet += pay;
+      player.totalInvested = Math.max(0, Number(player.totalBet) || 0);
       player.allIn = player.chips === 0;
       return pay;
     }
@@ -1383,10 +1413,7 @@
       let players = safePlayersArray(prev?.players).map((p, i) => {
         if (!p) return null;
         let finalChips = p.chips;
-        const lastWinners = prev?.winnerIds || [];
-        const isLastWinner = lastWinners.includes(p.id);
-
-        if (!isLastWinner || finalChips <= 0) {
+        if (finalChips <= 0) {
           finalChips = settings.startingChips;
         }
         return blankHandPlayer({ ...p, chips: finalChips });
@@ -1399,9 +1426,12 @@
           players,
           settings,
           stage: "waiting",
+          street: "waiting",
           actionLog: ["至少需要 2 名有筹码的玩家才能开局"],
           pot: 0,
+          pots: [],
           currentTurn: -1,
+          currentPlayer: -1,
           updatedAt: Date.now()
         };
       }
@@ -1418,6 +1448,7 @@
       let pot = 0;
       pot += postBlind(players[sbIdx], settings.smallBlind);
       pot += postBlind(players[bbIdx], settings.bigBlind);
+      pot = computeCommittedPot(players, 0);
       players[sbIdx].lastMove = "小盲";
       players[bbIdx].lastMove = "大盲";
 
@@ -1430,13 +1461,17 @@
         deck,
         communityCards: [],
         stage: "preflop",
+        street: "preflop",
         pot,
+        pots: buildSidePots(players),
         deadPot: 0,
         showdownPot: 0,
         currentBet: Math.max(players[sbIdx].currentBet, players[bbIdx].currentBet),
         minRaise: settings.bigBlind,
         dealerIdx,
+        dealerPosition: dealerIdx,
         currentTurn,
+        currentPlayer: currentTurn,
         handId: (Number(prev?.handId) || 0) + 1,
         turnStartedAt: Date.now(),
         updatedAt: Date.now(),
@@ -1445,7 +1480,8 @@
         winnerIds: [],
         finalWinnerId: null,
         finalWinnerName: "",
-        tableReaction: null
+        tableReaction: null,
+        pendingAction: null
       };
     }
 
@@ -1485,19 +1521,23 @@
         deck,
         communityCards,
         stage: nextStage,
+        street: nextStage,
         currentBet: 0,
         minRaise: state.settings.bigBlind,
         currentTurn,
+        currentPlayer: currentTurn,
+        pot: computeCommittedPot(players, state.deadPot),
+        pots: buildSidePots(players, state.deadPot),
         turnStartedAt: Date.now(),
         updatedAt: Date.now(),
         actionLog: [...(state.actionLog || []), nextStage === "flop" ? "翻牌圈" : nextStage === "turn" ? "转牌圈" : "河牌圈"].slice(-6)
       };
     }
 
-    function buildSidePots(players) {
+    function buildSidePots(players, deadPot = 0) {
       const contributors = safePlayersArray(players)
-        .filter(p => p && p.totalBet > 0)
-        .map(p => ({ seat: p.seat, amount: Number(p.totalBet) || 0, folded: !!p.folded }));
+        .filter(p => p && investedOf(p) > 0)
+        .map(p => ({ seat: p.seat, amount: investedOf(p), folded: !!p.folded }));
       const levels = [...new Set(contributors.map(c => c.amount))].sort((a, b) => a - b);
       const pots = [];
       let previous = 0;
@@ -1507,23 +1547,37 @@
         const amount = (level - previous) * involved.length;
         const eligibleSeats = involved.filter(c => !c.folded).map(c => c.seat);
         if (amount > 0 && eligibleSeats.length) {
-          pots.push({ amount, eligibleSeats, level });
+          pots.push({
+            amount,
+            eligibleSeats,
+            eligiblePlayers: eligibleSeats,
+            level,
+            contributors: involved.map(c => c.seat),
+            isRefund: involved.length === 1 && eligibleSeats.length === 1
+          });
         }
         previous = level;
+      }
+
+      const dead = Math.max(0, Number(deadPot) || 0);
+      if (dead > 0) {
+        const liveSeats = safePlayersArray(players).map((p, seat) => p && !p.folded && Array.isArray(p.cards) && p.cards.length === 2 ? seat : -1).filter(seat => seat >= 0);
+        if (pots.length) pots[0] = { ...pots[0], amount: pots[0].amount + dead };
+        else if (liveSeats.length) pots.push({ amount: dead, eligibleSeats: liveSeats, eligiblePlayers: liveSeats, level: 0, contributors: [] });
       }
 
       return pots;
     }
 
     function resolveShowdown(state, reason = "") {
+      if (state?.stage === "showdown" && Array.isArray(state.showdownResults)) return state;
       let players = safePlayersArray(state.players).map(p => p ? { ...p, currentBet: 0, acted: true } : null);
       const live = players.map((p, i) => ({ p, i })).filter(({ p }) => p && !p.folded);
       const forcedWin = live.length === 1;
       const scoreBySeat = {};
       const winBySeat = {};
-      const sidePots = buildSidePots(players);
-      if (sidePots.length && state.deadPot > 0) sidePots[0].amount += Number(state.deadPot) || 0;
-      const fallbackPot = sidePots.length ? sidePots : [{ amount: Number(state.pot) || 0, eligibleSeats: live.map(x => x.i), level: 0 }];
+      const sidePots = buildSidePots(players, state.deadPot);
+      const fallbackPot = sidePots.length ? sidePots : [{ amount: Number(state.pot) || 0, eligibleSeats: live.map(x => x.i), eligiblePlayers: live.map(x => x.i), level: 0, contributors: live.map(x => x.i) }];
       const potWinners = [];
 
       players.forEach((p, seat) => {
@@ -1541,12 +1595,27 @@
       fallbackPot.forEach((pot, potIdx) => {
         const eligible = pot.eligibleSeats.filter(seat => players[seat] && !players[seat].folded);
         if (!eligible.length) return;
+        if (pot.isRefund && eligible.length === 1) {
+          const seat = eligible[0];
+          players[seat].chips += pot.amount;
+          potWinners.push({
+            pot: potIdx + 1,
+            amount: pot.amount,
+            winnerSeats: [seat],
+            winnerNames: [players[seat]?.name].filter(Boolean),
+            eligibleSeats: eligible,
+            eligiblePlayers: eligible,
+            refund: true
+          });
+          return;
+        }
         const bestScore = Math.max(...eligible.map(seat => scoreBySeat[seat]?.score || 0));
         const winners = eligible.filter(seat => (scoreBySeat[seat]?.score || 0) === bestScore);
         const share = Math.floor(pot.amount / winners.length);
         const remainder = pot.amount - share * winners.length;
-        winners.forEach((seat, k) => {
-          const won = share + (k === 0 ? remainder : 0);
+        const oddChipOrder = seatsClockwiseFromDealer(state.dealerIdx, winners);
+        winners.forEach(seat => {
+          const won = share + (oddChipOrder.slice(0, remainder).includes(seat) ? 1 : 0);
           if (players[seat]) players[seat].chips += won;
           winBySeat[seat] += won;
         });
@@ -1554,7 +1623,9 @@
           pot: potIdx + 1,
           amount: pot.amount,
           winnerSeats: winners,
-          winnerNames: winners.map(seat => players[seat]?.name).filter(Boolean)
+          winnerNames: winners.map(seat => players[seat]?.name).filter(Boolean),
+          eligibleSeats: eligible,
+          eligiblePlayers: eligible
         });
       });
 
@@ -1584,8 +1655,12 @@
         ...state,
         players,
         stage: "showdown",
+        street: "showdown",
         currentTurn: -1,
-        showdownPot: Number(state.pot) || 0,
+        currentPlayer: -1,
+        pot: computeCommittedPot(players, state.deadPot),
+        pots: fallbackPot,
+        showdownPot: fallbackPot.reduce((sum, pot) => sum + (Number(pot.amount) || 0), 0),
         winnerIds: winners.map(i => players[i]?.id).filter(Boolean),
         showdownResults: results.sort((a, b) => a.seat - b.seat),
         sidePots: potWinners,
@@ -1598,6 +1673,7 @@
     }
 
     function advanceStage(state) {
+      state = { ...state, pot: computeCommittedPot(state.players, state.deadPot), pots: buildSidePots(state.players, state.deadPot) };
       const notFolded = activeSeats(state.players, true);
       if (notFolded.length <= 1) return resolveShowdown(state, "其余玩家弃牌");
       if (notFolded.every(({ p }) => p.allIn)) {
@@ -1629,18 +1705,20 @@
       let log = "";
       let potDelta = 0;
       let allInBurst = null;
+      const normalizedAction = ["FOLD", "CALL", "RAISE"].includes(action) ? action : "FOLD";
+      const toCall = Math.max(0, (Number(state.currentBet) || 0) - (Number(p.currentBet) || 0));
 
-      if (action === "FOLD") {
+      if (normalizedAction === "FOLD") {
         p.folded = true;
         p.acted = true;
         p.lastMove = "弃牌";
         log = `${p.name} 弃牌`;
-      } else if (action === "CALL") {
-        const toCall = Math.max(0, state.currentBet - p.currentBet);
+      } else if (normalizedAction === "CALL") {
         const pay = Math.min(p.chips, toCall);
         p.chips -= pay;
         p.currentBet += pay;
         p.totalBet += pay;
+        p.totalInvested = Math.max(0, Number(p.totalBet) || 0);
         potDelta += pay;
         p.allIn = p.chips === 0;
         p.acted = true;
@@ -1651,20 +1729,38 @@
           log = `${p.name} 跟注全下 ${money(p.currentBet)}`;
           allInBurst = { id: `${state.handId}_${seat}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, seat, name: p.name, amount: p.currentBet, at: Date.now() };
         }
-      } else if (action === "RAISE") {
-        const minTotal = state.currentBet === 0 ? state.settings.bigBlind : state.currentBet + state.minRaise;
+      } else if (normalizedAction === "RAISE") {
+        const oldCurrentBet = Number(state.currentBet) || 0;
+        const minFullRaiseTo = oldCurrentBet === 0 ? state.settings.bigBlind : oldCurrentBet + state.minRaise;
         const maxTotal = p.currentBet + p.chips;
-        const target = clamp(raiseTo, Math.min(minTotal, maxTotal), maxTotal);
+        let target = clamp(raiseTo, 0, maxTotal);
+        const isAllInAttempt = target >= maxTotal;
+
+        if (target <= oldCurrentBet) {
+          target = Math.min(maxTotal, oldCurrentBet);
+        }
+        if (target <= p.currentBet) return state;
+        if (target > oldCurrentBet && target < minFullRaiseTo && !isAllInAttempt) return state;
+
         const pay = Math.max(0, target - p.currentBet);
         p.chips -= pay;
         p.currentBet += pay;
         p.totalBet += pay;
+        p.totalInvested = Math.max(0, Number(p.totalBet) || 0);
         potDelta += pay;
         p.allIn = p.chips === 0;
         p.acted = true;
-        state.minRaise = Math.max(state.settings.bigBlind, p.currentBet - state.currentBet);
-        state.currentBet = Math.max(state.currentBet, p.currentBet);
-        players = players.map((x, i) => x && !x.folded && !x.allIn ? { ...x, acted: i === seat } : x);
+
+        if (p.currentBet > oldCurrentBet) {
+          const raiseSize = p.currentBet - oldCurrentBet;
+          const isFullRaise = p.currentBet >= minFullRaiseTo;
+          state.currentBet = p.currentBet;
+          if (isFullRaise) {
+            state.minRaise = Math.max(state.settings.bigBlind, raiseSize);
+            players = players.map((x, i) => x && !x.folded && !x.allIn ? { ...x, acted: i === seat } : x);
+          }
+        }
+
         players[seat] = p;
         p.lastMove = p.allIn ? "全下" : "加注";
         log = `${p.name} ${p.allIn ? "全下到" : "加注到"} ${money(p.currentBet)}`;
@@ -1673,8 +1769,9 @@
         }
       }
 
-      state.pot = (Number(state.pot) || 0) + potDelta;
       state.players = players;
+      state.pot = computeCommittedPot(players, state.deadPot);
+      state.pots = buildSidePots(players, state.deadPot);
       if (allInBurst) state.allInBurst = allInBurst;
       const live = activeSeats(players, true);
       if (live.length <= 1) return resolveShowdown({ ...state, actionLog: [...(state.actionLog || []), log].slice(-6) }, "其余玩家弃牌");
@@ -1685,6 +1782,7 @@
       return {
         ...state,
         currentTurn: next,
+        currentPlayer: next,
         turnStartedAt: Date.now(),
         updatedAt: Date.now(),
         allInBurst: allInBurst || state.allInBurst || null,
@@ -2769,6 +2867,7 @@
       const [bgmVolume, setBgmVolume] = useState(0.4);
       const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
       const audioRef = useRef(null);
+      const bgmShouldResumeRef = useRef(false);
 
       useEffect(() => {
         if (!audioRef.current) {
@@ -2801,6 +2900,44 @@
             audioRef.current.pause();
           }
         }
+      }, [bgmPlaying]);
+
+      useEffect(() => {
+        const pauseForBackground = () => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          bgmShouldResumeRef.current = bgmPlaying && !audio.paused;
+          audio.pause();
+        };
+
+        const resumeForForeground = () => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          if (!document.hidden && document.visibilityState === "visible" && bgmShouldResumeRef.current) {
+            audio.play().catch(err => {
+              console.warn("BGM 恢复播放被浏览器或 WebView 拦截：", err);
+            });
+          }
+        };
+
+        const handleVisibilityChange = () => {
+          if (document.hidden || document.visibilityState === "hidden") {
+            pauseForBackground();
+          } else {
+            resumeForForeground();
+          }
+        };
+
+        const handlePageHide = () => {
+          pauseForBackground();
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("pagehide", handlePageHide);
+        return () => {
+          document.removeEventListener("visibilitychange", handleVisibilityChange);
+          window.removeEventListener("pagehide", handlePageHide);
+        };
       }, [bgmPlaying]);
 
       /* Core user gesture listener to unlock both AudioContext (SFX) and background music */
@@ -2904,6 +3041,8 @@
         updateOnline(s => {
           if (!s.pendingAction || s.pendingAction.id !== pending.id) return s;
           if (s.currentTurn !== s.pendingAction.seat) return { ...s, pendingAction: null, updatedAt: Date.now() };
+          const actor = safePlayersArray(s.players)[s.pendingAction.seat];
+          if (!actor || actor.id !== s.pendingAction.playerId) return { ...s, pendingAction: null, updatedAt: Date.now() };
           return processAction({ ...s, pendingAction: null }, s.pendingAction.seat, s.pendingAction.action, s.pendingAction.raiseTo);
         });
       }, [mode, canHost, gameState?.pendingAction?.id]);
@@ -3069,11 +3208,15 @@
         if (mode === "online") {
           updateOnline(s => {
             if (s.currentTurn !== mySeat || s.stage === "waiting" || s.stage === "showdown") return s;
+            if (s.pendingAction) return s;
+            const actor = safePlayersArray(s.players)[mySeat];
+            if (!actor || actor.id !== uid) return s;
             return {
               ...s,
               pendingAction: {
                 id: `${uid}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                 seat: mySeat,
+                playerId: uid,
                 action,
                 raiseTo: Number(raiseTo) || 0,
                 at: Date.now()
@@ -3153,13 +3296,16 @@
               const players = safePlayersArray(s.players);
               if (!players[seat] || players[seat].id !== uid) return s;
               const playerName = players[seat].name;
-              const leavingBet = Number(players[seat].totalBet) || 0;
+              const leavingBet = investedOf(players[seat]);
               const activeHand = s.stage !== "waiting" && s.stage !== "showdown";
               players[seat] = null;
+              const deadPot = activeHand ? (Number(s.deadPot) || 0) + leavingBet : (Number(s.deadPot) || 0);
               return {
                 ...s,
                 players,
-                deadPot: activeHand ? (Number(s.deadPot) || 0) + leavingBet : (Number(s.deadPot) || 0),
+                deadPot,
+                pot: activeHand ? computeCommittedPot(players, deadPot) : Number(s.pot) || 0,
+                pots: activeHand ? buildSidePots(players, deadPot) : s.pots,
                 pendingAction: s.pendingAction?.seat === seat ? null : s.pendingAction,
                 actionLog: [...(s.actionLog || []), `${playerName} 已离桌，座位释放`].slice(-6),
                 updatedAt: Date.now()
